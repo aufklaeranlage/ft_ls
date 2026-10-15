@@ -8,6 +8,7 @@
 
 #include <cmocka.h>
 
+#include <stdlib.h>
 #include "utils.h"
 
 static void test_perm_str(__attribute__((unused)) void **state)
@@ -35,10 +36,22 @@ static void test_perm_str(__attribute__((unused)) void **state)
 	assert_string_equal(ret, "---x--x--x ");
 }
 
+static void test_make_path(__attribute__((unused)) void **state)
+{
+	char *ret;
+	ret = make_path("dir", "file");
+	assert_string_equal(ret, "dir/file");
+	free(ret);
+	ret = make_path("dir/", "file");
+	assert_string_equal(ret, "dir/file");
+	free(ret);
+}
+
 int main(void)
 {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_perm_str),
+		cmocka_unit_test(test_make_path),
 	};
 
 	return cmocka_run_group_tests_name("utils", tests, NULL, NULL);

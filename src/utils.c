@@ -1,4 +1,6 @@
 #include <sys/stat.h>
+#include <string.h>
+#include <stdlib.h>
 
 const char *perm_str(mode_t mode, int has_acl)
 {
@@ -35,3 +37,25 @@ const char *perm_str(mode_t mode, int has_acl)
 	return str;
 }
 
+/*!
+ * @brief Creates a concatinated syntactically valid path out of `dir` and `file`.
+ * @parameter `dir` the path to the directory that `file` should be apended to.
+ * @parameter `file` the file name that should be appended to `dir`.
+ * @return Returns a concatinated syntactically valid path on success; NULL on
+ *	failure.
+ */
+char *make_path(char *dir, char *file)
+{
+	char *path;
+	int dirlen = strlen(dir), filelen = strlen(file);
+	int needs_delim = dir[dirlen - 1] == '/' ? 0 : 1;
+	int total_len = dirlen + filelen + needs_delim;
+	path = malloc(sizeof(*path) * (total_len + 1));
+	if (!path)
+		return NULL;
+	strcpy(path, dir);
+	if (needs_delim)
+		path[dirlen] = '/';
+	strcpy(path + dirlen + needs_delim, file);
+	return path;
+}
