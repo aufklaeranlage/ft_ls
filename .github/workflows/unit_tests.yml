@@ -43,4 +43,4 @@ jobs:
 
       - name: Run tests
         working-directory: tests
-        run: make run -DLOCAL_LIBS_DIR="$HOME/.local"
+        run: make run LOCAL_LIBS_DIR="$HOME/.local"
