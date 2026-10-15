@@ -24,13 +24,13 @@ CFLAGS += -Wextra
 CFLAGS += -Werror
 
 CPPFLAGS :=
-CPPFLAGS += -I../include
+CPPFLAGS += -I$(LOCAL_LIBS_DIR)
 CPPFLAGS += -Iinclude
 CPPFLAGS += -MMD
 CPPFLAGS += -MP
 
 LDFLAGS :=
-LDFLAGS += -lcmocka
+LDFLAGS += -L$(LOCLA_LIBS_DIR) -lcmocka
 
 ifneq "$(or $(DEBUG), $(or $(UB), $(or $(ASAN), $(LSAN))))" ""
 	CFLAGS += -O0
