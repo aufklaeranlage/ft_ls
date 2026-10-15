@@ -76,4 +76,7 @@ fclean: clean
 
 re: fclean all
 
+run: re
+	$(TEST_NAMES:%=./%; )
+
 .PHONY: all clean fclean re
