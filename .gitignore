@@ -1,0 +1,6 @@
+*obj/
+*.o
+*.d
+ft_ls
+*.clangd
+*compile_flags.txt
