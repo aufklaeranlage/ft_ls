@@ -1,5 +1,13 @@
-#include "utils.h"
+// Need to be included before <cmocka.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <setjmp.h>
+#include <stdint.h>
+
 #include <cmocka.h>
+
+#include "utils.h"
 
 static void test_perm_str(__attribute__((unused)) void **state)
 {
