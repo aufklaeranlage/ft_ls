@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <setjmp.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #include <cmocka.h>
 
