@@ -37,12 +37,10 @@ jobs:
           cd cmocka
           mkdir -p build
           cd build
-          cmake -DCMAKE_INSTALL_PREFIX=$HOME/.local -DCMAKE_BUILD_TYPE=Debug ..
+          cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug ..
           make
-          make install
+          sudo make install
 
       - name: Run tests
         working-directory: tests
-        run: |
-          export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$HOME/.local/lib"
-          $HOME make run CMOCKA_LIB="$HOME/.local/lib" CMOCKA_INCLUDE="$HOME/.local/include"
+        run: make run

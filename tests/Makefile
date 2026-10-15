@@ -24,18 +24,12 @@ CFLAGS += -Wextra
 CFLAGS += -Werror
 
 CPPFLAGS :=
-ifdef CMOCKA_INCLUDE
-	CPPFLAGS += -I$(CMOCKA_INCLUDE)
-endif
 CPPFLAGS += -I../include
 CPPFLAGS += -Iinclude
 CPPFLAGS += -MMD
 CPPFLAGS += -MP
 
 LDFLAGS :=
-ifdef CMOCKA_LIB
-	LDFLAGS += -L$(CMOCKA_LIB)
-endif
 LDFLAGS += -lcmocka
 
 ifneq "$(or $(DEBUG), $(or $(UB), $(or $(ASAN), $(LSAN))))" ""
