@@ -37,10 +37,9 @@ jobs:
           cd cmocka
           mkdir -p build
           cd build
-          cmake -DCMAKE_INSTALL_PREFIX=../../ -DCMAKE_BUILD_TYPE=Debug ..
+          cmake -DCMAKE_INSTALL_PREFIX=/usr/ -DCMAKE_BUILD_TYPE=Debug ..
           make
           make install
-          export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:../../"
 
       - name: Run tests
         working-directory: tests
