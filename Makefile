@@ -2,7 +2,8 @@ NAME	:= ft_ls
 
 SRCS	:=
 vpath %.c src/
-SRCS	:= utils.c
+SRCS	+= ft_ls.c
+SRCS	+= utils.c
 
 OBJS := $(SRCS:.c=.o)
 OBJS := $(addprefix obj/,$(OBJS))
