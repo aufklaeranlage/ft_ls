@@ -24,16 +24,16 @@ CFLAGS += -Wextra
 CFLAGS += -Werror
 
 CPPFLAGS :=
-ifdef LOCAL_LIBS_DIR
-	CPPFLAGS += -I$(LOCAL_LIBS_DIR)
+ifdef CMOCKA_INCLUDE
+	CPPFLAGS += -I$(CMOCKA_INCLUDE)
 endif
 CPPFLAGS += -Iinclude
 CPPFLAGS += -MMD
 CPPFLAGS += -MP
 
 LDFLAGS :=
-ifdef LOCAL_LIBS_DIR
-	LDFLAGS += -L$(LOCAL_LIBS_DIR)/include
+ifdef CMOCKA_LIB
+	LDFLAGS += -L$(CMOCKA_LIB)
 endif
 LDFLAGS += -lcmocka
 
