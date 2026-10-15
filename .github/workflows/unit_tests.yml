@@ -27,6 +27,7 @@ jobs:
 
       # Runs a set of commands using the runners shell
       - name: Install testing framework
+        working-directory: tests
         run: |
           git clone https://github.com/clibs/cmocka.git
           cd cmocka
@@ -37,4 +38,5 @@ jobs:
           make install
 
       - name: Run tests
+        working-directory: tests
         run: make
