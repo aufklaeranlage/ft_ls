@@ -43,4 +43,4 @@ jobs:
 
       - name: Run tests
         working-directory: tests
-        run: make run CMOCKA_LIB="$HOME/.local/lib" CMOCKA_INCLUDE="$HME/.local/include"
+        run: make run CMOCKA_LIB="$HOME/.local/lib" CMOCKA_INCLUDE="$HOME/.local/include"
