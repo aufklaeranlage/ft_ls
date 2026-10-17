@@ -60,7 +60,8 @@ static MockFtsEnt *create_mock_ftsent(const char *name, unsigned short info, tim
 	memset(mock, 0, sizeof(MockFtsEnt));
 	mock->ent.fts_statp = &mock->stat_buf;
 	mock->ent.fts_info = info;
-	strncpy(mock->ent.fts_name, name, sizeof(mock->name_buf));
+	char *fts_name_ptr = mock->ent.fts_name;
+	strncpy(fts_name_ptr, name, sizeof(mock->name_buf));
 	mock->ent.fts_namelen = strlen(mock->name_buf);
 	if (info != FTS_NS && info != FTS_NSOK && info != FTS_ERR) {
 		mock->stat_buf.st_mtime = mtime;

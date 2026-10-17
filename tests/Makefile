@@ -13,17 +13,17 @@ UTILS_OBJS := utils.o test_utils.o
 UTILS_OBJS := $(addprefix obj/, $(UTILS_OBJS))
 UTILS_DEPS := $(UTILS_OBJS:.o=.d)
 
-CC := cc
-LD := cc
+CC ?= cc
+LD ?= cc
 RM := rm -rf
 MKDIR = mkdir -p $(@D)
 
-CFLAGS :=
+# CFLAGS :=
 CFLAGS += -Wall
 CFLAGS += -Wextra
 CFLAGS += -Werror
 
-CPPFLAGS :=
+# CPPFLAGS :=
 CPPFLAGS += -I../include
 CPPFLAGS += -Iinclude
 CPPFLAGS += -MMD
