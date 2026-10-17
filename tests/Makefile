@@ -32,7 +32,7 @@ CPPFLAGS += -MP
 LDFLAGS :=
 LDFLAGS += -lcmocka
 
-ifneq "$(or $(DEBUG), $(or $(UB), $(or $(ASAN), $(LSAN))))" ""
+ifndef DEBUG
 	CFLAGS += -O0
 	CFLAGS += -g3
 else
