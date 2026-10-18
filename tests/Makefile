@@ -18,21 +18,18 @@ LD := cc
 RM := rm -rf
 MKDIR = mkdir -p $(@D)
 
-CFLAGS :=
-CFLAGS += -Wall
-CFLAGS += -Wextra
-CFLAGS += -Werror
+override CFLAGS += -Wall
+override CFLAGS += -Wextra
+override CFLAGS += -Werror
 
-CPPFLAGS :=
-CPPFLAGS += -I../include
-CPPFLAGS += -Iinclude
-CPPFLAGS += -MMD
-CPPFLAGS += -MP
+override CPPFLAGS += -I../include
+override CPPFLAGS += -Iinclude
+override CPPFLAGS += -MMD
+override CPPFLAGS += -MP
 
-LDFLAGS :=
-LDFLAGS += -lcmocka
+override LDFLAGS += -lcmocka
 
-ifneq "$(or $(DEBUG), $(or $(UB), $(or $(ASAN), $(LSAN))))" ""
+ifdef DEBUG
 	CFLAGS += -O0
 	CFLAGS += -g3
 else

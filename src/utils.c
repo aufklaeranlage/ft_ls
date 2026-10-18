@@ -1,11 +1,16 @@
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <fts.h>
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 
-const char *perm_str(mode_t mode, int has_acl)
+const char *NS_PERM_STR = "-?????????";
+
+const char *perm_str(mode_t mode)
 {
-	static char str[12];
-	str[11] = 0;
+	static char str[11];
+	str[10] = 0;
 	switch (S_IFMT & mode) {
 		case S_IFSOCK: str[0] = 's'; break ;
 		case S_IFLNK: str[0] = 'l'; break ;
@@ -33,7 +38,6 @@ const char *perm_str(mode_t mode, int has_acl)
 		str[9] = mode & S_IXOTH ? 't' : 'T';
 	else
 		str[9] = mode & S_IXOTH ? 'x' : '-';
-	str[10] = has_acl ? '+' : ' ';
 	return str;
 }
 
@@ -58,4 +62,39 @@ char *make_path(char *dir, char *file)
 		path[dirlen] = '/';
 	strcpy(path + dirlen + needs_delim, file);
 	return path;
+}
+
+static int cistrcmp(const char *s1, const char *s2)
+{
+	int ret = 0;
+	while (*s1 || *s2) {
+		ret = tolower(*s1);
+		ret -= tolower(*s2);
+		if (ret)
+			return ret;
+		++s1;
+		++s2;
+	}
+	return ret;
+}
+
+int fts_alphasort(const FTSENT **f1, const FTSENT **f2)
+{
+	return cistrcmp((*f1)->fts_name, (*f2)->fts_name);
+}
+
+int fts_mtimesort(const FTSENT **f1, const FTSENT **f2)
+{
+	if ((*f1)->fts_info & (FTS_ERR | FTS_NS | FTS_NSOK)
+			|| (*f2)->fts_info & (FTS_ERR | FTS_NS | FTS_NSOK))
+		return fts_alphasort(f1, f2);
+	return (*f1)->fts_statp->st_mtime - (*f2)->fts_statp->st_mtime;
+}
+
+int fts_atimesort(const FTSENT **f1, const FTSENT **f2)
+{
+	if ((*f1)->fts_info & (FTS_ERR | FTS_NS | FTS_NSOK)
+			|| (*f2)->fts_info & (FTS_ERR | FTS_NS | FTS_NSOK))
+		return fts_alphasort(f1, f2);
+	return (*f1)->fts_statp->st_atime - (*f2)->fts_statp->st_atime;
 }

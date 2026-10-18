@@ -28,7 +28,7 @@ CPPFLAGS += -MP
 
 LDFLAGS :=
 
-ifneq "$(or $(DEBUG), $(or $(UB), $(or $(ASAN), $(LSAN))))" ""
+ifdef DEBUG
 	CFLAGS += -O0
 	CFLAGS += -g3
 else
