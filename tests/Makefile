@@ -13,24 +13,21 @@ UTILS_OBJS := utils.o test_utils.o
 UTILS_OBJS := $(addprefix obj/, $(UTILS_OBJS))
 UTILS_DEPS := $(UTILS_OBJS:.o=.d)
 
-CC ?= cc
-LD ?= cc
+CC := cc
+LD := cc
 RM := rm -rf
 MKDIR = mkdir -p $(@D)
 
-# CFLAGS :=
-CFLAGS += -Wall
-CFLAGS += -Wextra
-CFLAGS += -Werror
+override CFLAGS += -Wall
+override CFLAGS += -Wextra
+override CFLAGS += -Werror
 
-# CPPFLAGS :=
-CPPFLAGS += -I../include
-CPPFLAGS += -Iinclude
-CPPFLAGS += -MMD
-CPPFLAGS += -MP
+override CPPFLAGS += -I../include
+override CPPFLAGS += -Iinclude
+override CPPFLAGS += -MMD
+override CPPFLAGS += -MP
 
-LDFLAGS :=
-LDFLAGS += -lcmocka
+override LDFLAGS += -lcmocka
 
 ifndef DEBUG
 	CFLAGS += -O0
