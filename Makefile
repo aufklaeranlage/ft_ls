@@ -28,7 +28,7 @@ CPPFLAGS += -MP
 
 LDFLAGS :=
 
-ifndef DEBUG
+ifdef DEBUG
 	CFLAGS += -O0
 	CFLAGS += -g3
 else

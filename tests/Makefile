@@ -29,7 +29,7 @@ override CPPFLAGS += -MP
 
 override LDFLAGS += -lcmocka
 
-ifndef DEBUG
+ifdef DEBUG
 	CFLAGS += -O0
 	CFLAGS += -g3
 else
