@@ -53,7 +53,7 @@ struct print_fmt_len {
 	int date;
 };
 
-static int ndigits(int num, unsigned int base)
+static int ndigits(long num, unsigned int base)
 {
 	int size = 1;
 	while (num > 9) {
@@ -75,6 +75,10 @@ int has_acl(const char *pfad) {
         return 1;
     return 0;
 }
+
+const time_t old_file_seconds = 15778476;
+const char new_file_fmt[] = "%b %e %H:%M";
+const char old_file_fmt[] = "%b %e %Y";
 
 static int get_print_fmt_len(struct print_fmt_len *pfl, FTSENT *head, struct args *args)
 {
@@ -115,10 +119,25 @@ static int get_print_fmt_len(struct print_fmt_len *pfl, FTSENT *head, struct arg
 		tm = args->show_access_time ?
 			localtime(&node->fts_statp->st_atime) :
 			localtime(&node->fts_statp->st_mtime);
-		if ((len = strftime(datestring, sizeof(datestring), nl_langinfo(D_T_FMT), tm)) > pfl->date)
+		const char *tmfmt = ((args->show_access_time ? node->fts_statp->st_atime : node->fts_statp->st_mtime) >= old_file_seconds ? old_file_fmt : new_file_fmt);
+		if ((len = strftime(datestring, sizeof(datestring), tmfmt, tm)) > pfl->date)
 			pfl->date = len;
 	}
 	return 1;
+}
+
+int fts_readlink_wrap(const char *dir, const char *path, char *dest, size_t size)
+{
+	char name[256];
+	int dirlen = strlen(dir), pathlen = strlen(path);
+	if (dirlen + pathlen + 1 > 256)
+		return -1;
+	strcpy(name, dir);
+	strcpy(name + dirlen, path);
+	int ret = readlink(name, dest, size);
+	if (ret > 0)
+		dest[ret] = 0;
+	return ret;
 }
 
 static int fts_print_dir(FTSENT *head, struct args *args, int print_name)
@@ -148,6 +167,7 @@ static int fts_print_dir(FTSENT *head, struct args *args, int print_name)
 						continue;
 				case FTS_D:
 				case FTS_F:
+				case FTS_SL:
 					permstr = perm_str(node->fts_statp->st_mode); break;
 				case FTS_ERR:
 				case FTS_NS:
@@ -158,12 +178,14 @@ static int fts_print_dir(FTSENT *head, struct args *args, int print_name)
 			struct passwd *pwd;
 			struct group *grp;
 			char datestring[256];
+			char symlinkfile[256];
 			int dslen;
 			struct tm *tm = args->show_access_time ?
 				localtime(&node->fts_statp->st_atime) :
 				localtime(&node->fts_statp->st_mtime);
-			dslen = strftime(datestring, sizeof(datestring), nl_langinfo(D_T_FMT), tm);
-			fprintf(stdout, "%s%s %*ju %*s %*s %*jd %*s %s\n",
+			const char *tmfmt = ((args->show_access_time ? node->fts_statp->st_atime : node->fts_statp->st_mtime) >= old_file_seconds ? old_file_fmt : new_file_fmt);
+			dslen = strftime(datestring, sizeof(datestring), tmfmt, tm);
+			fprintf(stdout, "%s%s %*ju %*s %*s %*jd %*s %s%s%s\n",
 					permstr,
 					pfl.acl ? (has_acl(node->fts_path) ? "+" : " ") : "",
 					pfl.nlink, (uintmax_t) node->fts_statp->st_nlink,
@@ -171,7 +193,9 @@ static int fts_print_dir(FTSENT *head, struct args *args, int print_name)
 					pfl.group, ((grp = getgrgid(node->fts_statp->st_gid)) != NULL) ? grp->gr_name : "?", 
 					pfl.bsize, (intmax_t) node->fts_statp->st_size,
 					pfl.date, dslen > 0 ? datestring : "?",
-					name);
+					name,
+					node->fts_info == FTS_SL ? " -> " : "",
+					node->fts_info == FTS_SL ? (fts_readlink_wrap(node->fts_path, node->fts_accpath, symlinkfile, sizeof(symlinkfile) - 1) < 0 ? "?" : symlinkfile) : "");
 		}
 		first = 0;
 	}
@@ -210,10 +234,12 @@ int main(int ac, char *av[])
 		return 1;
 	char **pathav = pos >= ac ? fallback_pathav : av + pos;
 	int (*compar)(const FTSENT **, const FTSENT **) = fts_alphasort;
-	if (args.sort_time)
-		compar = fts_mtimesort;
-	if (args.show_access_time)
-		compar = fts_atimesort;
+	if (args.sort_time) {
+		if (args.show_access_time)
+			compar = fts_atimesort;
+		else
+			compar = fts_mtimesort;
+	}
 	int nprint = get_nprint(fts_open(pathav, FTS_PHYSICAL | (FTS_SEEDOT * args.all) | FTS_XDEV, compar), &args);
 	if (nprint < 0)
 		return 1;

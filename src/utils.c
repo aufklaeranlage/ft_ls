@@ -78,23 +78,51 @@ static int cistrcmp(const char *s1, const char *s2)
 	return ret;
 }
 
+static int ftsent_has_err(const FTSENT *ent)
+{
+	return (ent->fts_info == FTS_ERR
+			|| ent->fts_info == FTS_DNR
+			|| ent->fts_info == FTS_NS
+			|| ent->fts_info == FTS_NSOK);
+}
+
 int fts_alphasort(const FTSENT **f1, const FTSENT **f2)
 {
+	int f1err = ftsent_has_err(*f1),
+			f2err = ftsent_has_err(*f2);
+	switch (f1err + f2err) {
+		case 1:
+			return f2err - f1err;
+		case 2:
+			return 1;
+	}
 	return cistrcmp((*f1)->fts_name, (*f2)->fts_name);
 }
 
 int fts_mtimesort(const FTSENT **f1, const FTSENT **f2)
 {
-	if ((*f1)->fts_info & (FTS_ERR | FTS_NS | FTS_NSOK)
-			|| (*f2)->fts_info & (FTS_ERR | FTS_NS | FTS_NSOK))
+	if (ftsent_has_err(*f1) || ftsent_has_err(*f2))
 		return fts_alphasort(f1, f2);
-	return (*f1)->fts_statp->st_mtime - (*f2)->fts_statp->st_mtime;
+#if defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200809L
+	int diff_sec = (*f2)->fts_statp->st_mtime - (*f1)->fts_statp->st_mtime;
+	if (!diff_sec)
+		return (*f2)->fts_statp->st_mtim.tv_nsec - (*f1)->fts_statp->st_mtim.tv_nsec;
+	return diff_sec;
+#else
+	return (*f2)->fts_statp->st_mtime - (*f1)->fts_statp->st_mtime;
+#endif
 }
 
 int fts_atimesort(const FTSENT **f1, const FTSENT **f2)
 {
-	if ((*f1)->fts_info & (FTS_ERR | FTS_NS | FTS_NSOK)
-			|| (*f2)->fts_info & (FTS_ERR | FTS_NS | FTS_NSOK))
+	if (ftsent_has_err(*f1) || ftsent_has_err(*f2))
 		return fts_alphasort(f1, f2);
+#if defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200809L
+	int diff_sec = (*f2)->fts_statp->st_atime - (*f1)->fts_statp->st_atime;
+	if (!diff_sec)
+		return (*f2)->fts_statp->st_atim.tv_nsec - (*f1)->fts_statp->st_atim.tv_nsec;
+	return diff_sec;
+#else
 	return (*f1)->fts_statp->st_atime - (*f2)->fts_statp->st_atime;
+#endif
 }
