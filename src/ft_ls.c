@@ -198,12 +198,13 @@ static int fts_print_ent(FTSENT *ent, struct args *args, struct print_fmt_len *p
 				}
 			}
 	}
-	fprintf(stdout, "%s%*s %*ju%*s%*s %*jd %*s %*s %s%s\n",
+	fprintf(stdout, "%s%*s %*ju%s%-*s %-*s %*jd %*s %*s %s%s\n",
 			permstr,
 			pfl->acl, acl,
 			pfl->nlink, no_stat ? 0 : (uintmax_t) st->st_nlink,
-			args->long_no_owner ? 0 : pfl->user + 1, !args->long_no_owner ? user : "", 
-			pfl->group + 1, group, 
+			args->long_no_owner ? "" : " ",
+			args->long_no_owner ? 0 : pfl->user, !args->long_no_owner ? user : "", 
+			pfl->group, group, 
 			pfl->bsize, no_stat ? 0 : (intmax_t) st->st_size,
 			6, date1,
 			5, date2,
@@ -213,21 +214,21 @@ static int fts_print_ent(FTSENT *ent, struct args *args, struct print_fmt_len *p
 	return 1;
 }
 
-static int fts_print_dir(FTSENT *head, struct args *args, int print_name, int pre_nl)
+static int fts_print_dir(FTSENT *head, const char *path, struct args *args, int print_name, int pre_nl)
 {
-	if (!head)
-		return 0;
 	if (print_name) {
 		if (!pre_nl)
 			fprintf(stdout, "\n");
-		fprintf(stdout, "%s:\n", head->fts_parent->fts_path);
+		fprintf(stdout, "%s:\n", path);
 	}
 	struct print_fmt_len pfl;
 	if (args->long_fmt || args->long_no_owner)
 		get_print_fmt_len(&pfl, head, args);
-	const char *name;
 	if (args->long_fmt || args->long_no_owner)
 		fprintf(stdout, "total %lu\n", pfl.blocks);
+	if (!head)
+		return 0;
+	const char *name;
 	int first = 1;
 	for (FTSENT *node = head; node != NULL; node = node->fts_link) {
 		name = node->fts_name; 
@@ -324,7 +325,7 @@ int main(int ac, char *av[])
 
 		}
 		if (ent->fts_info == FTS_D || ent->fts_level == 0) {
-			if (!fts_print_dir(fts_children(fts, 0), &args, nprint > 1, first))
+			if (!fts_print_dir(fts_children(fts, 0), ent->fts_path, &args, nprint > 1, first))
 				continue;
 			else if (!args.long_fmt && !args.long_no_owner)
 				fprintf(stdout, "\n");
