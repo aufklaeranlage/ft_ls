@@ -13,6 +13,7 @@
 #include <time.h>
 #include <langinfo.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 const char *prog = "ft_ls";
 
@@ -44,16 +45,7 @@ static int read_args(struct args *args, int ac, char *av[])
 
 extern const char *NS_PERM_STR;
 
-struct print_fmt_len {
-	int acl;
-	int nlink;
-	int user;
-	int group;
-	int bsize;
-	int date;
-};
-
-static int ndigits(int num, unsigned int base)
+static int ndigits(long num, unsigned int base)
 {
 	int size = 1;
 	while (num > 9) {
@@ -76,22 +68,32 @@ int has_acl(const char *pfad) {
     return 0;
 }
 
+struct print_fmt_len {
+	int acl;
+	int nlink;
+	int user;
+	int group;
+	int bsize;
+	size_t blocks;
+};
+
 static int get_print_fmt_len(struct print_fmt_len *pfl, FTSENT *head, struct args *args)
 {
 	*pfl = (struct print_fmt_len) { };
 	int digits;
 	struct passwd *pwd;
 	struct group *grp;
-	struct tm *tm;
-	char datestring[256];
 	const char *name;
+	pfl->blocks = 0;
 	for (FTSENT *node = head; node != NULL; node = node->fts_link) {
+		char *path = make_path(node->fts_path, node->fts_accpath);
 		int len;
 		name = node->fts_name; 
 		if (!args->all && name[0] == '.')
 			continue ;
-		if (has_acl(node->fts_path))
+		if (has_acl(path))
 			pfl->acl = 1;
+		free(path);
 		switch (node->fts_info) {
 				case FTS_ERR:
 				case FTS_NS:
@@ -112,12 +114,101 @@ static int get_print_fmt_len(struct print_fmt_len *pfl, FTSENT *head, struct arg
 		digits = ndigits(node->fts_statp->st_size, 10);
 		if (digits > pfl->bsize)
 			pfl->bsize = digits;
-		tm = args->show_access_time ?
-			localtime(&node->fts_statp->st_atime) :
-			localtime(&node->fts_statp->st_mtime);
-		if ((len = strftime(datestring, sizeof(datestring), nl_langinfo(D_T_FMT), tm)) > pfl->date)
-			pfl->date = len;
+		pfl->blocks += node->fts_statp->st_blocks;
 	}
+	pfl->blocks /= 2;
+	return 1;
+}
+
+static void set_username(char **user, uid_t uid)
+{
+	struct passwd *pwd;
+	pwd = getpwuid(uid);
+	if (!pwd)
+		return;
+	*user = pwd->pw_name; 
+}
+
+static void set_groupname(char **group, gid_t gid)
+{
+	struct group *grp;
+	grp = getgrgid(gid);
+	if (!grp)
+		return;
+	*group = grp->gr_name; 
+}
+
+static void set_dates(char **date1, char **date2, struct stat *st, int atime)
+{
+	const time_t old_file_seconds = 15778476;
+	char datestr[2][256];
+	time_t curtime;
+	time(&curtime);
+	int dslen;
+	struct tm *tm = atime ?
+		localtime(&st->st_atime) :
+		localtime(&st->st_mtime);
+	dslen = strftime(datestr[0], sizeof(datestr[0]), "%b %e", tm);
+	if (dslen <= 0)
+		return;
+	*date1 = datestr[0];
+	dslen = strftime(datestr[1], sizeof(datestr[1]),
+			(curtime - (atime ? st->st_atime : st->st_mtime) >= old_file_seconds ? "%Y" : "%H:%M"),
+			tm);
+	if (dslen <= 0)
+		return;
+	*date2 = datestr[1];
+}
+
+static int fts_print_ent(FTSENT *ent, struct args *args, struct print_fmt_len *pfl)
+{
+	struct stat *st;
+	const char *permstr = "-?????????";
+	char *path = make_path(ent->fts_path, ent->fts_accpath),
+			 *acl = "",
+			 *user = "?",
+			 *group = "?",
+			 *date1 = "?",
+			 *date2 = "?",
+			 *file = ent->fts_name,
+			 symln[256] = " -> ";
+	int no_stat = 0;
+	switch (ent->fts_info) {
+		case FTS_ERR:
+		case FTS_NS:
+		case FTS_NSOK:
+			no_stat = 1;
+			break;
+		case FTS_SL:
+		case FTS_DOT:
+		case FTS_DP:
+		case FTS_D:
+		case FTS_F:
+		default:
+			st = ent->fts_statp;
+			permstr = perm_str(st->st_mode);
+			acl = has_acl(path) ? "+" : "";
+			set_username(&user, st->st_uid);
+			set_groupname(&group, st->st_gid);
+			set_dates(&date1, &date2, st, args->show_access_time);
+			if (ent->fts_info == FTS_SL) {
+				if (readlink(path, symln + 4, sizeof(symln) - 4) < 0) {
+					symln[0] = '?'; symln[1] = 0;
+				}
+			}
+	}
+	fprintf(stdout, "%s%*s %*ju %*s %*s %*jd %*s %*s %s%s\n",
+			permstr,
+			pfl->acl, acl,
+			pfl->nlink, no_stat ? 0 : (uintmax_t) st->st_nlink,
+			!args->long_no_owner ? 0 : pfl->user , !args->long_no_owner ? user : "", 
+			pfl->group, group, 
+			pfl->bsize, no_stat ? 0 : (intmax_t) st->st_size,
+			6, date1,
+			5, date2,
+			file,
+			ent->fts_info == FTS_SL ? symln : "");
+	free(path);
 	return 1;
 }
 
@@ -131,7 +222,8 @@ static int fts_print_dir(FTSENT *head, struct args *args, int print_name)
 	if (args->long_fmt || args->long_no_owner)
 		get_print_fmt_len(&pfl, head, args);
 	const char *name;
-	const char *permstr;
+	if (args->long_fmt || args->long_no_owner)
+		fprintf(stdout, "total %lu\n", pfl.blocks);
 	int first = 1;
 	for (FTSENT *node = head; node != NULL; node = node->fts_link) {
 		name = node->fts_name; 
@@ -141,37 +233,13 @@ static int fts_print_dir(FTSENT *head, struct args *args, int print_name)
 			fprintf(stdout, "%s%s", first ? "" : "  ", name);
 		} else {
 			switch (node->fts_info) {
-				case FTS_DP:
-					continue;
 				case FTS_DOT:
 					if (!args->all)
+				case FTS_DP:
 						continue;
-				case FTS_D:
-				case FTS_F:
-					permstr = perm_str(node->fts_statp->st_mode); break;
-				case FTS_ERR:
-				case FTS_NS:
-				case FTS_NSOK:
 				default:
-					permstr = NS_PERM_STR;
+						fts_print_ent(node, args, &pfl);
 			}
-			struct passwd *pwd;
-			struct group *grp;
-			char datestring[256];
-			int dslen;
-			struct tm *tm = args->show_access_time ?
-				localtime(&node->fts_statp->st_atime) :
-				localtime(&node->fts_statp->st_mtime);
-			dslen = strftime(datestring, sizeof(datestring), nl_langinfo(D_T_FMT), tm);
-			fprintf(stdout, "%s%s %*ju %*s %*s %*jd %*s %s\n",
-					permstr,
-					pfl.acl ? (has_acl(node->fts_path) ? "+" : " ") : "",
-					pfl.nlink, (uintmax_t) node->fts_statp->st_nlink,
-					pfl.user, ((pwd = getpwuid(node->fts_statp->st_uid)) != NULL) ? pwd->pw_name : "?", 
-					pfl.group, ((grp = getgrgid(node->fts_statp->st_gid)) != NULL) ? grp->gr_name : "?", 
-					pfl.bsize, (intmax_t) node->fts_statp->st_size,
-					pfl.date, dslen > 0 ? datestring : "?",
-					name);
 		}
 		first = 0;
 	}
@@ -209,11 +277,18 @@ int main(int ac, char *av[])
 	if (pos < 0)
 		return 1;
 	char **pathav = pos >= ac ? fallback_pathav : av + pos;
-	int (*compar)(const FTSENT **, const FTSENT **) = fts_alphasort;
-	if (args.sort_time)
-		compar = fts_mtimesort;
-	if (args.show_access_time)
-		compar = fts_atimesort;
+	int (*compar_arr[3][2])(const FTSENT **, const FTSENT **) = {
+		{fts_alphasort, fts_ralphasort},
+		{fts_mtimesort, fts_rmtimesort},
+		{fts_atimesort, fts_ratimesort}
+	};
+	int (*compar)(const FTSENT **, const FTSENT **) = compar_arr[0][args.reverse];
+	if (args.sort_time) {
+		if (args.show_access_time)
+			compar = compar_arr[2][args.reverse];
+		else
+			compar = compar_arr[1][args.reverse];
+	}
 	int nprint = get_nprint(fts_open(pathav, FTS_PHYSICAL | (FTS_SEEDOT * args.all) | FTS_XDEV, compar), &args);
 	if (nprint < 0)
 		return 1;
