@@ -67,15 +67,18 @@ char *make_path(char *dir, char *file)
 static int cistrcmp(const char *s1, const char *s2)
 {
 	int ret = 0;
-	while (*s1 || *s2) {
-		ret = tolower(*s1);
-		ret -= tolower(*s2);
+	int pos1 = 0, pos2 = 0;
+	while (s1[pos1] == '.')
+		++pos1;
+	while (s2[pos2] == '.')
+		++pos2;
+	while (s1[pos1] || s2[pos2]) {
+		ret = tolower(s1[pos1++]);
+		ret -= tolower(s2[pos2++]);
 		if (ret)
 			return ret;
-		++s1;
-		++s2;
 	}
-	return ret;
+	return pos1 - pos2;
 }
 
 static int ftsent_has_err(const FTSENT *ent)
@@ -121,6 +124,47 @@ int fts_atimesort(const FTSENT **f1, const FTSENT **f2)
 	int diff_sec = (*f2)->fts_statp->st_atime - (*f1)->fts_statp->st_atime;
 	if (!diff_sec)
 		return (*f2)->fts_statp->st_atim.tv_nsec - (*f1)->fts_statp->st_atim.tv_nsec;
+	return diff_sec;
+#else
+	return (*f2)->fts_statp->st_atime - (*f1)->fts_statp->st_atime;
+#endif
+}
+
+int fts_ralphasort(const FTSENT **f1, const FTSENT **f2)
+{
+	int f1err = ftsent_has_err(*f1),
+			f2err = ftsent_has_err(*f2);
+	switch (f1err + f2err) {
+		case 1:
+			return f2err - f1err;
+		case 2:
+			return 1;
+	}
+	return cistrcmp((*f2)->fts_name, (*f1)->fts_name);
+}
+
+int fts_rmtimesort(const FTSENT **f1, const FTSENT **f2)
+{
+	if (ftsent_has_err(*f1) || ftsent_has_err(*f2))
+		return fts_ralphasort(f1, f2);
+#if defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200809L
+	int diff_sec = (*f1)->fts_statp->st_mtime - (*f2)->fts_statp->st_mtime;
+	if (!diff_sec)
+		return (*f1)->fts_statp->st_mtim.tv_nsec - (*f2)->fts_statp->st_mtim.tv_nsec;
+	return diff_sec;
+#else
+	return (*f1)->fts_statp->st_mtime - (*f2)->fts_statp->st_mtime;
+#endif
+}
+
+int fts_ratimesort(const FTSENT **f1, const FTSENT **f2)
+{
+	if (ftsent_has_err(*f1) || ftsent_has_err(*f2))
+		return fts_ralphasort(f1, f2);
+#if defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200809L
+	int diff_sec = (*f1)->fts_statp->st_atime - (*f2)->fts_statp->st_atime;
+	if (!diff_sec)
+		return (*f1)->fts_statp->st_atim.tv_nsec - (*f2)->fts_statp->st_atim.tv_nsec;
 	return diff_sec;
 #else
 	return (*f1)->fts_statp->st_atime - (*f2)->fts_statp->st_atime;

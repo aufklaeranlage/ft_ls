@@ -12,9 +12,11 @@ const char *perm_str(mode_t mode);
 char *make_path(char *dir, char *file);
 
 int fts_alphasort(const FTSENT **f1, const FTSENT **f2);
-
 int fts_mtimesort(const FTSENT **f1, const FTSENT **f2);
-
 int fts_atimesort(const FTSENT **f1, const FTSENT **f2);
+
+int fts_ralphasort(const FTSENT **f1, const FTSENT **f2);
+int fts_rmtimesort(const FTSENT **f1, const FTSENT **f2);
+int fts_ratimesort(const FTSENT **f1, const FTSENT **f2);
 
 #endif /* !FT_LS_UTILS_H */
