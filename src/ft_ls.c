@@ -14,6 +14,7 @@
 #include <langinfo.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <locale.h>
 
 const char *prog = "ft_ls";
 
@@ -197,12 +198,12 @@ static int fts_print_ent(FTSENT *ent, struct args *args, struct print_fmt_len *p
 				}
 			}
 	}
-	fprintf(stdout, "%s%*s %*ju %*s %*s %*jd %*s %*s %s%s\n",
+	fprintf(stdout, "%s%*s %*ju%*s%*s %*jd %*s %*s %s%s\n",
 			permstr,
 			pfl->acl, acl,
 			pfl->nlink, no_stat ? 0 : (uintmax_t) st->st_nlink,
-			!args->long_no_owner ? 0 : pfl->user , !args->long_no_owner ? user : "", 
-			pfl->group, group, 
+			args->long_no_owner ? 0 : pfl->user + 1, !args->long_no_owner ? user : "", 
+			pfl->group + 1, group, 
 			pfl->bsize, no_stat ? 0 : (intmax_t) st->st_size,
 			6, date1,
 			5, date2,
@@ -212,12 +213,15 @@ static int fts_print_ent(FTSENT *ent, struct args *args, struct print_fmt_len *p
 	return 1;
 }
 
-static int fts_print_dir(FTSENT *head, struct args *args, int print_name)
+static int fts_print_dir(FTSENT *head, struct args *args, int print_name, int pre_nl)
 {
 	if (!head)
 		return 0;
-	if (print_name)
-		fprintf(stdout, "%s:\n", head->fts_parent->fts_accpath);
+	if (print_name) {
+		if (!pre_nl)
+			fprintf(stdout, "\n");
+		fprintf(stdout, "%s:\n", head->fts_parent->fts_path);
+	}
 	struct print_fmt_len pfl;
 	if (args->long_fmt || args->long_no_owner)
 		get_print_fmt_len(&pfl, head, args);
@@ -269,6 +273,7 @@ static int get_nprint(FTS *fts, struct args *args)
 
 int main(int ac, char *av[])
 {
+	__attribute__((unused)) char *new = setlocale(LC_ALL, "");
 	prog = av[0];
 	struct args args;
 	char *fallback_pathav[2] = { ".", NULL };
@@ -310,24 +315,20 @@ int main(int ac, char *av[])
 			case FTS_DNR:
 				switch (ent->fts_errno) {
 					case EACCES:
-						fprintf(stderr, "%s: cannot open directory '%s': %s\n", prog, name, strerror(ent->fts_errno)); break;
+						fprintf(stderr, "%s: cannot open directory '%s': %s\n", prog, ent->fts_path, strerror(ent->fts_errno)); break;
 					case ENOENT:
 					default:
-						fprintf(stderr, "%s: cannot access '%s': %s\n", prog, name, strerror(ent->fts_errno)); break;
+						fprintf(stderr, "%s: cannot access '%s': %s\n", prog, ent->fts_path, strerror(ent->fts_errno)); break;
 				}
 			continue ;
 
 		}
 		if (ent->fts_info == FTS_D || ent->fts_level == 0) {
-			if (nprint > 1 && !first)
-					fprintf(stdout, "\n");
-			if (!fts_print_dir(fts_children(fts, 0), &args, nprint > 1))
+			if (!fts_print_dir(fts_children(fts, 0), &args, nprint > 1, first))
 				continue;
 			else if (!args.long_fmt && !args.long_no_owner)
 				fprintf(stdout, "\n");
 			first = 0;
-		} else if (ent->fts_info == FTS_ERR) {
-			fprintf(stderr, "%s: %s\n", prog, strerror(ent->fts_errno));
 		}
 	}
 	fts_close(fts);

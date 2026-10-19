@@ -64,7 +64,7 @@ char *make_path(char *dir, char *file)
 	return path;
 }
 
-static int cistrcmp(const char *s1, const char *s2)
+static __attribute__((unused)) int cistrcmp(const char *s1, const char *s2)
 {
 	int ret = 0;
 	int pos1 = 0, pos2 = 0;
@@ -73,8 +73,8 @@ static int cistrcmp(const char *s1, const char *s2)
 	while (s2[pos2] == '.')
 		++pos2;
 	while (s1[pos1] || s2[pos2]) {
-		ret = tolower(s1[pos1++]);
-		ret -= tolower(s2[pos2++]);
+		ret = toupper(s1[pos1++]);
+		ret -= toupper(s2[pos2++]);
 		if (ret)
 			return ret;
 	}
@@ -99,7 +99,7 @@ int fts_alphasort(const FTSENT **f1, const FTSENT **f2)
 		case 2:
 			return 1;
 	}
-	return cistrcmp((*f1)->fts_name, (*f2)->fts_name);
+	return strcoll((*f1)->fts_name, (*f2)->fts_name);
 }
 
 int fts_mtimesort(const FTSENT **f1, const FTSENT **f2)
