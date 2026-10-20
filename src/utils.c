@@ -64,7 +64,7 @@ char *make_path(char *dir, char *file)
 	return path;
 }
 
-static int cistrcmp(const char *s1, const char *s2)
+static __attribute__((unused)) int cistrcmp(const char *s1, const char *s2)
 {
 	int ret = 0;
 	int pos1 = 0, pos2 = 0;
@@ -73,8 +73,8 @@ static int cistrcmp(const char *s1, const char *s2)
 	while (s2[pos2] == '.')
 		++pos2;
 	while (s1[pos1] || s2[pos2]) {
-		ret = tolower(s1[pos1++]);
-		ret -= tolower(s2[pos2++]);
+		ret = toupper(s1[pos1++]);
+		ret -= toupper(s2[pos2++]);
 		if (ret)
 			return ret;
 	}
@@ -99,7 +99,7 @@ int fts_alphasort(const FTSENT **f1, const FTSENT **f2)
 		case 2:
 			return 1;
 	}
-	return cistrcmp((*f1)->fts_name, (*f2)->fts_name);
+	return strcoll((*f1)->fts_name, (*f2)->fts_name);
 }
 
 int fts_mtimesort(const FTSENT **f1, const FTSENT **f2)
@@ -130,43 +130,44 @@ int fts_atimesort(const FTSENT **f1, const FTSENT **f2)
 #endif
 }
 
+int fts_sizesort(const FTSENT **f1, const FTSENT **f2)
+{
+	if (ftsent_has_err(*f1) || ftsent_has_err(*f2))
+		return fts_alphasort(f1, f2);
+	int diff = (*f2)->fts_statp->st_size - (*f1)->fts_statp->st_size;
+	if (!diff)
+		return fts_alphasort(f1, f2);
+	return diff;
+}
+
 int fts_ralphasort(const FTSENT **f1, const FTSENT **f2)
 {
-	int f1err = ftsent_has_err(*f1),
-			f2err = ftsent_has_err(*f2);
-	switch (f1err + f2err) {
-		case 1:
-			return f2err - f1err;
-		case 2:
-			return 1;
-	}
-	return cistrcmp((*f2)->fts_name, (*f1)->fts_name);
+	return -fts_alphasort(f1, f2);
 }
 
 int fts_rmtimesort(const FTSENT **f1, const FTSENT **f2)
 {
-	if (ftsent_has_err(*f1) || ftsent_has_err(*f2))
-		return fts_ralphasort(f1, f2);
-#if defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200809L
-	int diff_sec = (*f1)->fts_statp->st_mtime - (*f2)->fts_statp->st_mtime;
-	if (!diff_sec)
-		return (*f1)->fts_statp->st_mtim.tv_nsec - (*f2)->fts_statp->st_mtim.tv_nsec;
-	return diff_sec;
-#else
-	return (*f1)->fts_statp->st_mtime - (*f2)->fts_statp->st_mtime;
-#endif
+	return -fts_mtimesort(f1, f2);
 }
 
 int fts_ratimesort(const FTSENT **f1, const FTSENT **f2)
 {
-	if (ftsent_has_err(*f1) || ftsent_has_err(*f2))
-		return fts_ralphasort(f1, f2);
-#if defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200809L
-	int diff_sec = (*f1)->fts_statp->st_atime - (*f2)->fts_statp->st_atime;
-	if (!diff_sec)
-		return (*f1)->fts_statp->st_atim.tv_nsec - (*f2)->fts_statp->st_atim.tv_nsec;
-	return diff_sec;
-#else
-	return (*f1)->fts_statp->st_atime - (*f2)->fts_statp->st_atime;
-#endif
+	return -fts_atimesort(f1, f2);
+}
+
+int fts_rsizesort(const FTSENT **f1, const FTSENT **f2)
+{
+	return -fts_sizesort(f1, f2);
+}
+
+int is_dev(mode_t mode)
+{
+	switch (mode & S_IFMT) {
+		case S_IFBLK:
+		case S_IFCHR:
+			return 1;
+		default:
+			;
+	}
+	return 0;
 }

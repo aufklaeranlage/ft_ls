@@ -3,6 +3,7 @@
 
 #include <sys/types.h>
 #include <sys/xattr.h>
+#include <sys/sysmacros.h>
 #include <dirent.h>
 #include <string.h>
 #include <stdio.h>
@@ -14,6 +15,8 @@
 #include <langinfo.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <locale.h>
+#include <ctype.h>
 
 const char *prog = "ft_ls";
 
@@ -22,20 +25,45 @@ const char *prog = "ft_ls";
 //
 // }
 
+struct args {
+	/* -l : long format; show owner  */
+	unsigned int long_fmt: 1;
+	/* -g : same as long format, but doesn't show owners; overwrites -l */
+	unsigned int long_no_owner : 1;
+	/* -R : recursive; also run on directories inside directories */
+	unsigned int recursive : 1;
+	/* -a : show hidden entries */
+	unsigned int all : 1;
+	/* -r : reverse sort */
+	unsigned int reverse : 1;
+	struct {
+	/* -t : sort by time */
+		unsigned int time : 1;
+	/* -S : sort by size */
+		unsigned int size : 1;
+	} sort;
+	/* -u : With -lt or without -l sort by at; with -l sort by name */
+	unsigned int show_access_time : 1;
+	/* -d : list only directories given via cl */
+	unsigned int list_directories: 1;
+};
+
+
 static int read_args(struct args *args, int ac, char *av[])
 {
 	*args = (struct args){ };
 	int opt;
-	while ((opt = getopt(ac, av, "lgRartud")) != -1) {
+	while ((opt = getopt(ac, av, "lgRartudS")) != -1) {
 		switch (opt) {
 		case 'l': args->long_fmt = 1; break;
 		case 'g': args->long_no_owner = 1; break;
 		case 'R': args->recursive = 1; break;
 		case 'a': args->all = 1; break;
 		case 'r': args->reverse = 1; break;
-		case 't': args->sort_time = 1; break;
+		case 't': args->sort.size = 0; args->sort.time = 1; break;
 		case 'u': args->show_access_time = 1; break;
 		case 'd': args->list_directories = 1; break;
+		case 'S': args->sort.time = 0; args->sort.size = 1; break ;
 		default:
 							return -1;
 		}
@@ -45,9 +73,9 @@ static int read_args(struct args *args, int ac, char *av[])
 
 extern const char *NS_PERM_STR;
 
-static int ndigits(long num, unsigned int base)
+static size_t ndigits(long num, unsigned int base)
 {
-	int size = 1;
+	size_t size = 1;
 	while (num > 9) {
 		num /= base;
 		++size;
@@ -73,6 +101,7 @@ struct print_fmt_len {
 	int nlink;
 	int user;
 	int group;
+	int major;
 	int bsize;
 	size_t blocks;
 };
@@ -89,11 +118,11 @@ static int get_print_fmt_len(struct print_fmt_len *pfl, FTSENT *head, struct arg
 		char *path = make_path(node->fts_path, node->fts_accpath);
 		int len;
 		name = node->fts_name; 
-		if (!args->all && name[0] == '.')
-			continue ;
 		if (has_acl(path))
 			pfl->acl = 1;
 		free(path);
+		if (!args->all && name[0] == '.')
+			continue ;
 		switch (node->fts_info) {
 				case FTS_ERR:
 				case FTS_NS:
@@ -105,15 +134,26 @@ static int get_print_fmt_len(struct print_fmt_len *pfl, FTSENT *head, struct arg
 		digits = ndigits(node->fts_statp->st_nlink, 10);
 		if (digits > pfl->nlink)
 			pfl->nlink = digits;
-		if ((pwd = getpwuid(node->fts_statp->st_uid)) != NULL
-				&& (len = strlen(pwd->pw_name)) > pfl->user)
+		len = ((pwd = getpwuid(node->fts_statp->st_uid)) != NULL ?
+				(int)strlen(pwd->pw_name) : ndigits(node->fts_statp->st_uid, 10));
+		if (len > pfl->user)
 			pfl->user = len;
-		if ((grp = getgrgid(node->fts_statp->st_gid)) != NULL
-				&& (len = strlen(grp->gr_name)) > pfl->group)
+		len = ((grp = getgrgid(node->fts_statp->st_gid)) != NULL ?
+				(int)strlen(grp->gr_name) : ndigits(node->fts_statp->st_gid, 10));
+		if (len > pfl->group)
 			pfl->group = len;
-		digits = ndigits(node->fts_statp->st_size, 10);
-		if (digits > pfl->bsize)
-			pfl->bsize = digits;
+		if (is_dev(node->fts_statp->st_mode)) {
+			digits = ndigits(major(node->fts_statp->st_rdev), 10);
+			if (digits > pfl->major)
+				pfl->major = digits;
+			digits = ndigits(minor(node->fts_statp->st_rdev), 10);
+			if (digits > pfl->bsize)
+				pfl->bsize = digits;
+		} else {
+			digits = ndigits(node->fts_statp->st_size, 10);
+			if (digits > pfl->bsize)
+				pfl->bsize = digits;
+		}
 		pfl->blocks += node->fts_statp->st_blocks;
 	}
 	pfl->blocks /= 2;
@@ -122,26 +162,34 @@ static int get_print_fmt_len(struct print_fmt_len *pfl, FTSENT *head, struct arg
 
 static void set_username(char **user, uid_t uid)
 {
+	static char fallback[256];
 	struct passwd *pwd;
 	pwd = getpwuid(uid);
-	if (!pwd)
+	if (!pwd) {
+		snprintf(fallback, 255, "%u", uid);
+		*user = fallback;
 		return;
+	}
 	*user = pwd->pw_name; 
 }
 
 static void set_groupname(char **group, gid_t gid)
 {
+	static char fallback[256];
 	struct group *grp;
 	grp = getgrgid(gid);
-	if (!grp)
+	if (!grp) {
+		snprintf(fallback, 255, "%u", gid);
+		*group = fallback;
 		return;
+	}
 	*group = grp->gr_name; 
 }
 
 static void set_dates(char **date1, char **date2, struct stat *st, int atime)
 {
 	const time_t old_file_seconds = 15778476;
-	char datestr[2][256];
+	static char datestr[2][256];
 	time_t curtime;
 	time(&curtime);
 	int dslen;
@@ -193,37 +241,61 @@ static int fts_print_ent(FTSENT *ent, struct args *args, struct print_fmt_len *p
 			set_dates(&date1, &date2, st, args->show_access_time);
 			if (ent->fts_info == FTS_SL) {
 				if (readlink(path, symln + 4, sizeof(symln) - 4) < 0) {
-					symln[0] = '?'; symln[1] = 0;
+					symln[0] = 0;
 				}
 			}
 	}
-	fprintf(stdout, "%s%*s %*ju %*s %*s %*jd %*s %*s %s%s\n",
-			permstr,
-			pfl->acl, acl,
-			pfl->nlink, no_stat ? 0 : (uintmax_t) st->st_nlink,
-			!args->long_no_owner ? 0 : pfl->user , !args->long_no_owner ? user : "", 
-			pfl->group, group, 
-			pfl->bsize, no_stat ? 0 : (intmax_t) st->st_size,
-			6, date1,
-			5, date2,
-			file,
-			ent->fts_info == FTS_SL ? symln : "");
+	if (!no_stat && is_dev(st->st_mode)) {
+		fprintf(stdout, isdigit(user[0]) ? "%s%*s %*ju%s%*s %-*s %*jd,%*jd %*s %*s %s%s\n"
+				: "%s%*s %*ju%s%-*s %-*s %*jd,%*jd %*s %*s %s%s\n",
+				permstr,
+				pfl->acl, acl,
+				pfl->nlink, (uintmax_t) st->st_nlink,
+				args->long_no_owner ? "" : " ",
+				args->long_no_owner ? 0 : pfl->user, !args->long_no_owner ? user : "", 
+				pfl->group, group, 
+				pfl->major, (intmax_t) major(st->st_rdev),
+				pfl->bsize, (intmax_t) minor(st->st_rdev),
+				6, date1,
+				5, date2,
+				file,
+				ent->fts_info == FTS_SL ? symln : "");
+	} else {
+		fprintf(stdout, isdigit(user[0]) ? "%s%*s %*ju%s%*s %-*s %*jd %*s %*s %s%s\n"
+				: "%s%*s %*ju%s%-*s %-*s %*jd %*s %*s %s%s\n",
+				permstr,
+				pfl->acl, acl,
+				pfl->nlink, no_stat ? 0 : (uintmax_t) st->st_nlink,
+				args->long_no_owner ? "" : " ",
+				args->long_no_owner ? 0 : pfl->user, !args->long_no_owner ? user : "", 
+				pfl->group, group, 
+				pfl->bsize + (!(!pfl->major) * (pfl->major + 1)), no_stat ? 0 : (intmax_t) st->st_size,
+				6, date1,
+				5, date2,
+				file,
+				ent->fts_info == FTS_SL ? symln : "");
+	}
 	free(path);
 	return 1;
 }
 
-static int fts_print_dir(FTSENT *head, struct args *args, int print_name)
+static int fts_print_dir(FTSENT *head, const char *path, struct args *args, int print_name, int pre_nl)
 {
-	if (!head)
+	if (errno)
 		return 0;
-	if (print_name)
-		fprintf(stdout, "%s:\n", head->fts_parent->fts_accpath);
+	if (print_name) {
+		if (!pre_nl)
+			fprintf(stdout, "\n");
+		fprintf(stdout, "%s:\n", path);
+	}
 	struct print_fmt_len pfl;
 	if (args->long_fmt || args->long_no_owner)
 		get_print_fmt_len(&pfl, head, args);
-	const char *name;
 	if (args->long_fmt || args->long_no_owner)
 		fprintf(stdout, "total %lu\n", pfl.blocks);
+	if (!head)
+		return 0;
+	const char *name;
 	int first = 1;
 	for (FTSENT *node = head; node != NULL; node = node->fts_link) {
 		name = node->fts_name; 
@@ -269,6 +341,7 @@ static int get_nprint(FTS *fts, struct args *args)
 
 int main(int ac, char *av[])
 {
+	__attribute__((unused)) char *new = setlocale(LC_ALL, "");
 	prog = av[0];
 	struct args args;
 	char *fallback_pathav[2] = { ".", NULL };
@@ -277,22 +350,25 @@ int main(int ac, char *av[])
 	if (pos < 0)
 		return 1;
 	char **pathav = pos >= ac ? fallback_pathav : av + pos;
-	int (*compar_arr[3][2])(const FTSENT **, const FTSENT **) = {
+	int (*compar_arr[4][2])(const FTSENT **, const FTSENT **) = {
 		{fts_alphasort, fts_ralphasort},
 		{fts_mtimesort, fts_rmtimesort},
-		{fts_atimesort, fts_ratimesort}
+		{fts_atimesort, fts_ratimesort},
+		{fts_sizesort, fts_rsizesort},
 	};
 	int (*compar)(const FTSENT **, const FTSENT **) = compar_arr[0][args.reverse];
-	if (args.sort_time) {
+	if (args.sort.time) {
 		if (args.show_access_time)
 			compar = compar_arr[2][args.reverse];
 		else
 			compar = compar_arr[1][args.reverse];
+	} else if (args.sort.size) {
+		compar = compar_arr[3][args.reverse];
 	}
-	int nprint = get_nprint(fts_open(pathav, FTS_PHYSICAL | (FTS_SEEDOT * args.all) | FTS_XDEV, compar), &args);
+	int nprint = get_nprint(fts_open(pathav, FTS_PHYSICAL | (FTS_SEEDOT * args.all), compar), &args);
 	if (nprint < 0)
 		return 1;
-	FTS *fts = fts_open(pathav, FTS_PHYSICAL | (FTS_SEEDOT * args.all) | FTS_XDEV, compar);
+	FTS *fts = fts_open(pathav, FTS_PHYSICAL | (FTS_SEEDOT * args.all), compar);
 	int first = 1;
 	for (FTSENT *ent = fts_read(fts); ent != NULL; ent = fts_read(fts)) {
 		if (ent->fts_info == FTS_DP)
@@ -310,24 +386,21 @@ int main(int ac, char *av[])
 			case FTS_DNR:
 				switch (ent->fts_errno) {
 					case EACCES:
-						fprintf(stderr, "%s: cannot open directory '%s': %s\n", prog, name, strerror(ent->fts_errno)); break;
+						fprintf(stderr, "%s: cannot open directory '%s': %s\n", prog, ent->fts_path, strerror(ent->fts_errno)); break;
 					case ENOENT:
 					default:
-						fprintf(stderr, "%s: cannot access '%s': %s\n", prog, name, strerror(ent->fts_errno)); break;
+						fprintf(stderr, "%s: cannot access '%s': %s\n", prog, ent->fts_path, strerror(ent->fts_errno)); break;
 				}
 			continue ;
 
 		}
 		if (ent->fts_info == FTS_D || ent->fts_level == 0) {
-			if (nprint > 1 && !first)
-					fprintf(stdout, "\n");
-			if (!fts_print_dir(fts_children(fts, 0), &args, nprint > 1))
+			errno = 0;
+			if (!fts_print_dir(fts_children(fts, 0), ent->fts_path, &args, nprint > 1, first))
 				continue;
 			else if (!args.long_fmt && !args.long_no_owner)
 				fprintf(stdout, "\n");
 			first = 0;
-		} else if (ent->fts_info == FTS_ERR) {
-			fprintf(stderr, "%s: %s\n", prog, strerror(ent->fts_errno));
 		}
 	}
 	fts_close(fts);
